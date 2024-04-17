@@ -11,4 +11,4 @@ git apply tgate.patch
 ```
 
 ## TODO
-- [ ] Result image quality is inconsistent with the paper
+- [ ] Result image quality is inconsistent with origin
