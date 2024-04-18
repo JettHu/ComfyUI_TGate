@@ -1,12 +1,10 @@
-import torch
-
-
 class TGateTransformerWrapper:
-    def __init__(self, sigma_gate_attn1=-1, sigma_gate_attn2=-1):
-        self.sigma_gate_attn1 = sigma_gate_attn1
-        self.sigma_gate_attn2 = sigma_gate_attn2
+    def __init__(self, sigma_gate=-1, sigma_gate_self_attn=-1, only_cross_attention=True):
+        self.sigma_gate_attn2 = sigma_gate
+        self.sigma_gate_attn1 = sigma_gate_self_attn
         self.attn1_cache = {}
         self.attn2_cache = {}
+        self.only_cross_attention = only_cross_attention
 
     def __call__(self, inner_block, x, context=None, transformer_options=None):
         transformer_options = transformer_options or {}
@@ -38,7 +36,7 @@ class TGateTransformerWrapper:
                 x += x_skip
 
         n = inner_block.norm1(x)
-        if sigma < self.sigma_gate_attn1 and transformer_block in self.attn1_cache:
+        if not self.only_cross_attention and sigma < self.sigma_gate_attn1 and transformer_block in self.attn1_cache:
             # use cache
             n = self.attn1_cache[transformer_block]
             if sigma < self.sigma_gate_attn2:
@@ -100,10 +98,9 @@ class TGateTransformerWrapper:
 
             if sigma < self.sigma_gate_attn2 and transformer_block in self.attn2_cache:
                 n = self.attn2_cache[transformer_block]
-                if sigma < self.sigma_gate_attn1:
+                if self.only_cross_attention or sigma < self.sigma_gate_attn1:
                     uncond, cond = n.chunk(2)
                     n = (uncond + cond) / 2
-                    # n = torch.mean(n, dim=0, keepdim=True)
             else:
                 attn2_replace_patch = transformer_patches_replace.get("attn2", {})
                 block_attn2 = transformer_block
@@ -137,8 +134,8 @@ class TGateTransformerWrapper:
 
 
 class TGateSamplerCfgRescaler:
-    def __init__(self, sigma_gate_attn1=-1, sigma_gate_attn2=-1):
-        self.sigma_gate = min(sigma_gate_attn1, sigma_gate_attn2)
+    def __init__(self, sigma_gate=-1, sigma_gate_self_attn=-1, only_cross_attention=True):
+        self.sigma_gate = sigma_gate if only_cross_attention else min(sigma_gate_self_attn, sigma_gate)
 
     def __call__(self, kwds):
         sigma = kwds["timestep"].detach().cpu()[0].item() if "timestep" in kwds else 999999999.9
@@ -148,8 +145,8 @@ class TGateSamplerCfgRescaler:
 
 
 class TGateSamplerFn:
-    def __init__(self, sigma_gate_attn1=-1, sigma_gate_attn2=-1):
-        self.sigma_gate = min(sigma_gate_attn1, sigma_gate_attn2)
+    def __init__(self, sigma_gate=-1, sigma_gate_self_attn=-1, only_cross_attention=True):
+        self.sigma_gate = sigma_gate if only_cross_attention else min(sigma_gate_self_attn, sigma_gate)
 
     def __call__(self, kwds):
         sigma = kwds["timestep"].detach().cpu()[0].item() if "timestep" in kwds else 999999999.9
@@ -166,22 +163,29 @@ class TGateApply:
         return {
             "required": {
                 "model": ("MODEL",),
-                "attn1_start_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "attn2_start_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "start_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "only_cross_attention": ("BOOLEAN", {"default": True}),
             },
+            "optional": {"self_attn_start_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01})},
         }
 
     RETURN_TYPES = ("MODEL",)
     FUNCTION = "apply_tgate"
     CATEGORY = "TGate"
 
-    def apply_tgate(self, model, attn1_start_at=1.0, attn2_start_at=1.0):
+    def apply_tgate(self, model, start_at=1.0, only_cross_attention=True, self_attn_start_at=1.0):
         model_clone = model.clone()
-        sigma_attn1 = model_clone.get_model_object("model_sampling").percent_to_sigma(attn1_start_at)
-        sigma_attn2 = model_clone.get_model_object("model_sampling").percent_to_sigma(attn2_start_at)
-        model_clone.set_model_transformer_function(TGateTransformerWrapper(sigma_attn1, sigma_attn2))
-        model_clone.set_model_sampler_cfg_rescaler(TGateSamplerCfgRescaler(sigma_attn1, sigma_attn2))
-        # model_clone.set_model_sampler_cfg_function(TGateSamplerFn(sigma_attn1, sigma_attn2))
+        sigma_gate = model_clone.get_model_object("model_sampling").percent_to_sigma(start_at)
+        sigma_gate_self_attn = model_clone.get_model_object("model_sampling").percent_to_sigma(self_attn_start_at)
+        model_clone.set_model_transformer_function(
+            TGateTransformerWrapper(sigma_gate, sigma_gate_self_attn, only_cross_attention)
+        )
+        model_clone.set_model_sampler_cfg_rescaler(
+            TGateSamplerCfgRescaler(sigma_gate, sigma_gate_self_attn, only_cross_attention)
+        )
+        # model_clone.set_model_sampler_cfg_function(
+        #     TGateSamplerFn(sigma_gate, sigma_gate_self_attn, only_cross_attention)
+        # )
         return (model_clone,)
 
 
