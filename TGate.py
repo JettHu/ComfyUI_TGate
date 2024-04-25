@@ -1,13 +1,11 @@
-class TGateTransformerWrapper:
-    def __init__(self, sigma_gate=-1, sigma_gate_self_attn=-1, only_cross_attention=True):
-        self.sigma_gate_attn2 = sigma_gate
-        self.sigma_gate_attn1 = sigma_gate_self_attn
-        self.attn1_cache = {}
-        self.attn2_cache = {}
-        self.only_cross_attention = only_cross_attention
+from types import MethodType
 
-    def __call__(self, inner_block, x, context=None, transformer_options=None):
-        transformer_options = transformer_options or {}
+
+def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=True):
+    attn_cache = {}
+
+    def tgate_forward(self, x, context=None, transformer_options={}):
+        nonlocal attn_cache
         extra_options = {}
         block = transformer_options.get("block", None)
         block_index = transformer_options.get("block_index", 0)
@@ -22,29 +20,26 @@ class TGateTransformerWrapper:
             else:
                 extra_options[k] = transformer_options[k]
 
-        extra_options["n_heads"] = inner_block.n_heads
-        extra_options["dim_head"] = inner_block.d_head
+        extra_options["n_heads"] = self.n_heads
+        extra_options["dim_head"] = self.d_head
         sigma = extra_options["sigmas"].detach().cpu()[0].item() if "sigmas" in extra_options else 999999999.9
-        # transformer_block key
         transformer_block = (block[0], block[1], block_index) if block is not None else None
 
-        # in resblock
-        if inner_block.ff_in:
+        if self.ff_in:
             x_skip = x
-            x = inner_block.ff_in(inner_block.norm_in(x))
-            if inner_block.is_res:
+            x = self.ff_in(self.norm_in(x))
+            if self.is_res:
                 x += x_skip
 
-        n = inner_block.norm1(x)
-        if not self.only_cross_attention and sigma < self.sigma_gate_attn1 and transformer_block in self.attn1_cache:
+        if not only_cross_attention and sigma < sigma_gate_attn1 and "attn1" in attn_cache:
             # use cache
-            n = self.attn1_cache[transformer_block]
-            if sigma < self.sigma_gate_attn2:
+            n = attn_cache["attn1"]
+            if sigma < sigma_gate:
                 uncond, cond = n.chunk(2)
                 n = (uncond + cond) / 2
-                # n = torch.mean(n, dim=0, keepdim=True)
         else:
-            context_attn1 = context if inner_block.disable_self_attn else None
+            n = self.norm1(x)
+            context_attn1 = context if self.disable_self_attn else None
             value_attn1 = None
 
             if "attn1_patch" in transformer_patches:
@@ -60,25 +55,23 @@ class TGateTransformerWrapper:
             if block_attn1 not in attn1_replace_patch:
                 block_attn1 = block
 
-            # do attn
             if block_attn1 in attn1_replace_patch:
                 if context_attn1 is None:
                     context_attn1 = n
                     value_attn1 = n
-                n = inner_block.attn1.to_q(n)
-                context_attn1 = inner_block.attn1.to_k(context_attn1)
-                value_attn1 = inner_block.attn1.to_v(value_attn1)
+                n = self.attn1.to_q(n)
+                context_attn1 = self.attn1.to_k(context_attn1)
+                value_attn1 = self.attn1.to_v(value_attn1)
                 n = attn1_replace_patch[block_attn1](n, context_attn1, value_attn1, extra_options)
-                n = inner_block.attn1.to_out(n)
+                n = self.attn1.to_out(n)
             else:
-                n = inner_block.attn1(n, context=context_attn1, value=value_attn1)
+                n = self.attn1(n, context=context_attn1, value=value_attn1)
 
             if "attn1_output_patch" in transformer_patches:
                 patch = transformer_patches["attn1_output_patch"]
                 for p in patch:
                     n = p(n, extra_options)
-
-            self.attn1_cache[transformer_block] = n  # TODO: reduce, cache times
+            attn_cache["attn1"] = n  # TODO: reduce, cache times
 
         x += n
         if "middle_patch" in transformer_patches:
@@ -86,22 +79,22 @@ class TGateTransformerWrapper:
             for p in patch:
                 x = p(x, extra_options)
 
-        if inner_block.attn2 is not None:
-            n = inner_block.norm2(x)
-            context_attn2 = n if inner_block.switch_temporal_ca_to_sa else context
-            value_attn2 = None
-            if "attn2_patch" in transformer_patches:
-                patch = transformer_patches["attn2_patch"]
-                value_attn2 = context_attn2
-                for p in patch:
-                    n, context_attn2, value_attn2 = p(n, context_attn2, value_attn2, extra_options)
+        if sigma < sigma_gate and "attn2" in attn_cache:
+            n = attn_cache["attn2"]
+            if only_cross_attention or sigma < sigma_gate_attn1:
+                uncond, cond = n.chunk(2)
+                n = (uncond + cond) / 2
+        else:
+            if self.attn2 is not None:
+                n = self.norm2(x)
+                context_attn2 = n if self.switch_temporal_ca_to_sa else context
+                value_attn2 = None
+                if "attn2_patch" in transformer_patches:
+                    patch = transformer_patches["attn2_patch"]
+                    value_attn2 = context_attn2
+                    for p in patch:
+                        n, context_attn2, value_attn2 = p(n, context_attn2, value_attn2, extra_options)
 
-            if sigma < self.sigma_gate_attn2 and transformer_block in self.attn2_cache:
-                n = self.attn2_cache[transformer_block]
-                if self.only_cross_attention or sigma < self.sigma_gate_attn1:
-                    uncond, cond = n.chunk(2)
-                    n = (uncond + cond) / 2
-            else:
                 attn2_replace_patch = transformer_patches_replace.get("attn2", {})
                 block_attn2 = transformer_block
                 if block_attn2 not in attn2_replace_patch:
@@ -110,51 +103,74 @@ class TGateTransformerWrapper:
                 if block_attn2 in attn2_replace_patch:
                     if value_attn2 is None:
                         value_attn2 = context_attn2
-                    n = inner_block.attn2.to_q(n)
-                    context_attn2 = inner_block.attn2.to_k(context_attn2)
-                    value_attn2 = inner_block.attn2.to_v(value_attn2)
+                    n = self.attn2.to_q(n)
+                    context_attn2 = self.attn2.to_k(context_attn2)
+                    value_attn2 = self.attn2.to_v(value_attn2)
                     n = attn2_replace_patch[block_attn2](n, context_attn2, value_attn2, extra_options)
-                    n = inner_block.attn2.to_out(n)
+                    n = self.attn2.to_out(n)
                 else:
-                    n = inner_block.attn2(n, context=context_attn2, value=value_attn2)
-                if "attn2_output_patch" in transformer_patches:
-                    patch = transformer_patches["attn2_output_patch"]
-                    for p in patch:
-                        n = p(n, extra_options)
-                self.attn2_cache[transformer_block] = n
+                    n = self.attn2(n, context=context_attn2, value=value_attn2)
+
+            if "attn2_output_patch" in transformer_patches:
+                patch = transformer_patches["attn2_output_patch"]
+                for p in patch:
+                    n = p(n, extra_options)
 
         x += n
-        if inner_block.is_res:
+        if self.is_res:
             x_skip = x
-        x = inner_block.ff(inner_block.norm3(x))
-        if inner_block.is_res:
+        x = self.ff(self.norm3(x))
+        if self.is_res:
             x += x_skip
 
         return x
 
+    return tgate_forward
+
+
+original_sampling_function_ref = None
+
+
+def sampling_function_wrapper(fn):
+    # model, x, timestep, uncond, cond, cond_scale, model_options={}, seed=None
+    def wrapper(model, x, timestep, uncond, cond, cond_scale, model_options=None, seed=None, **kwargs):
+        model_options = model_options or {}
+        if "sampler_cfg_rescaler" in model_options:
+            cond_scale = model_options["sampler_cfg_rescaler"]({"cond_scale": cond_scale, "timestep": timestep})
+        return fn(
+            model=model,
+            x=x,
+            timestep=timestep,
+            uncond=uncond,
+            cond=cond,
+            cond_scale=cond_scale,
+            model_options=model_options,
+            seed=seed,
+            **kwargs,
+        )
+
+    return wrapper
+
+
+def monkey_patching_comfy_sampling_function():
+    global original_sampling_function_ref
+    from comfy import samplers
+
+    if original_sampling_function_ref is not None and original_sampling_function_ref is not samplers.sampling_function:
+        return
+    original_sampling_function_ref = samplers.sampling_function
+    samplers.sampling_function = sampling_function_wrapper(samplers.sampling_function)
+
 
 class TGateSamplerCfgRescaler:
-    def __init__(self, sigma_gate=-1, sigma_gate_self_attn=-1, only_cross_attention=True):
-        self.sigma_gate = sigma_gate if only_cross_attention else min(sigma_gate_self_attn, sigma_gate)
+    def __init__(self, sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=True):
+        self.sigma_gate = sigma_gate if only_cross_attention else min(sigma_gate_attn1, sigma_gate)
 
     def __call__(self, kwds):
         sigma = kwds["timestep"].detach().cpu()[0].item() if "timestep" in kwds else 999999999.9
         if sigma < self.sigma_gate:
             return 1.0
         return kwds["cond_scale"]
-
-
-class TGateSamplerFn:
-    def __init__(self, sigma_gate=-1, sigma_gate_self_attn=-1, only_cross_attention=True):
-        self.sigma_gate = sigma_gate if only_cross_attention else min(sigma_gate_self_attn, sigma_gate)
-
-    def __call__(self, kwds):
-        sigma = kwds["timestep"].detach().cpu()[0].item() if "timestep" in kwds else 999999999.9
-        if sigma < self.sigma_gate:
-            return kwds["cond"] * kwds["cond_scale"]
-        # uncond_pred + (cond_pred - uncond_pred) * cond_scale
-        # x - [x - uncond_pred + (x - uncond_pred - (x - cond_pred)) * cond_scale]
-        return kwds["uncond"] + (kwds["uncond"] - kwds["cond"]) * kwds["cond_scale"]
 
 
 class TGateApply:
@@ -177,15 +193,31 @@ class TGateApply:
         model_clone = model.clone()
         sigma_gate = model_clone.get_model_object("model_sampling").percent_to_sigma(start_at)
         sigma_gate_self_attn = model_clone.get_model_object("model_sampling").percent_to_sigma(self_attn_start_at)
-        model_clone.set_model_transformer_function(
-            TGateTransformerWrapper(sigma_gate, sigma_gate_self_attn, only_cross_attention)
+
+        transformer_blocks = []
+        for n, m in model_clone.model.named_modules():
+            if not n.endswith("transformer_blocks"):
+                continue
+            for tb in m:
+                transformer_blocks.append(tb)
+
+        # We inject function into the transformer_blocks instances so that
+        # we can apply tgate without modifying the library source.
+        for tb in transformer_blocks:
+            tgate_forward = MethodType(
+                make_tgate_forward(
+                    sigma_gate,
+                    sigma_gate_attn1=sigma_gate_self_attn,
+                    only_cross_attention=only_cross_attention,
+                ),
+                tb,
+            )
+            # update_wrapper(tgate_forward, tb._forward)
+            tb._forward = tgate_forward
+        model_clone.model_options["sampler_cfg_rescaler"] = TGateSamplerCfgRescaler(
+            sigma_gate, sigma_gate_self_attn, only_cross_attention
         )
-        model_clone.set_model_sampler_cfg_rescaler(
-            TGateSamplerCfgRescaler(sigma_gate, sigma_gate_self_attn, only_cross_attention)
-        )
-        # model_clone.set_model_sampler_cfg_function(
-        #     TGateSamplerFn(sigma_gate, sigma_gate_self_attn, only_cross_attention)
-        # )
+        monkey_patching_comfy_sampling_function()
         return (model_clone,)
 
 

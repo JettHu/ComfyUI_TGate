@@ -2,32 +2,37 @@
 
 [ComfyUI](https://github.com/comfyanonymous/ComfyUI) reference implementation for [T-GATE](https://github.com/HaozheLiu-ST/T-GATE).
 
-## Example workflows
+> Some monkey patch is used for current implementation. If any error occurs, make sure you have the latest version.
+
+## :star2: Changelog
+- **[2024.4.26]** :tada: Native version release(NO NEED git patch anymore!).
+- **[2024.4.18]** Initial repo.
+
+## :books: Example workflows
 
 The [examples directory](./examples/) has workflow example. There are images generated with and without T-GATE in the [assets](./assets/) folder.
 
 ![example](./examples/tgate_workflow_example.png)
 
-Origin result
+| Origin result | T-GATE result |
+| :---: | :---: |
+| ![origin_result](./assets/origin_result.png) | ![tgate_result](./assets/tgate_result.png) |
 
-![origin_result](./assets/origin_result.png)
+T-GATE result image comes from the workflow included in the [example](./examples/tgate_workflow_example.png) image.
 
-T-GATE result (start at 0.5, only_cross_attention)
-![tgate_result](./assets/tgate_result.png)
-
-## INSTALL
+## :green_book: INSTALL
 ```bash
 git clone https://github.com/JettHu/ComfyUI_TGate
 git apply tgate.patch   # need patch yet, PR in progress
 ```
-## Major Features
+## :orange_book: Major Features
 
 - Training-Free.
 - Friendly support CNN-based U-Net, Transformer, and Consistency Model
 - 10%-50% speed up for different diffusion models.
 
 
-## Nodes reference
+## :book: Nodes reference
 
 ### TGateApply
 
@@ -35,14 +40,14 @@ git apply tgate.patch   # need patch yet, PR in progress
 - **model**, model loaded by `Load Checkpoint` and other MODEL loaders.
 
 #### Configuration parameters
-- **start_at**, this is the timestepping. Defines at what percentage point of the generation to start use the T-GATE cache.
-- **only_cross_attention**, default only used to cache the cross-attention output, ref to [issues](https://github.com/HaozheLiu-ST/T-GATE/issues/8#issuecomment-2061379798)
+- **start_at**, this is the percentage of steps. Defines at what percentage point of the generation to start use the T-GATE cache.
+- **only_cross_attention**, **[RECOMMEND]** default is True, the effect is to cache only the output of cross-attention, ref to [issues](https://github.com/HaozheLiu-ST/T-GATE/issues/8#issuecomment-2061379798)
 
 
 #### Optional configuration
-- **self_attn_start_at**, only takes effect when `only_cross_attention` is `false`, timestepping too. Defines at what percentage point of the generation to start use the T-GATE cache.
+- **self_attn_start_at**, only takes effect when `only_cross_attention` is `false`, percentage of steps too. Defines at what percentage point of the generation to start use the T-GATE cache on latent self attnention.
 
-## Performance (from [T-GATE](https://github.com/HaozheLiu-ST/T-GATE))
+## :rocket: Performance (from [T-GATE](https://github.com/HaozheLiu-ST/T-GATE))
 | Model                 | MACs     | Param     | Latency | Zero-shot 10K-FID on MS-COCO |
 |-----------------------|----------|-----------|---------|---------------------------|
 | SD-1.5                | 16.938T  | 859.520M  | 7.032s  | 23.927                    |
@@ -66,6 +71,10 @@ The MACs and Params are calculated by [calflops](https://github.com/MrYxJ/calcul
 
 The FID is calculated by [PytorchFID](https://github.com/mseitzer/pytorch-fid).
 
-## TODO
+## :memo: TODO
 - [x] Result image quality is inconsistent with origin. Now cache attn2 (cross_attention) only.
-- [ ] Implement a native version and no longer rely on git patch
+- [x] Implement a native version and no longer rely on git patch
+
+## :mag: Common promblem
+
+For apple silicon users using the mps backend, torch and macos versions may cause some problems. refer to [issue comment](https://github.com/JettHu/ComfyUI_TGate/issues/4#issuecomment-2077823182).
