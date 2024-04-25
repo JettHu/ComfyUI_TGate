@@ -23,8 +23,9 @@ T-GATE result image comes from the workflow included in the [example](./examples
 ## :green_book: INSTALL
 ```bash
 git clone https://github.com/JettHu/ComfyUI_TGate
-git apply tgate.patch   # need patch yet, PR in progress
+# that's all!
 ```
+
 ## :orange_book: Major Features
 
 - Training-Free.
