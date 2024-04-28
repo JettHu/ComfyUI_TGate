@@ -4,6 +4,14 @@
 
 > Some monkey patch is used for current implementation. If any error occurs, make sure you have the latest version.
 
+If my work helps you, you can give my project a small start. 
+
+Some of my other projects that may help you.
+- [ComfyUI-TCD](https://github.com/JettHu/ComfyUI-TCD)
+- [ComfyUI_TGate](https://github.com/JettHu/ComfyUI_TGate)
+- [ComfyUI-ELLA](https://github.com/TencentQQGYLab/ComfyUI-ELLA)
+
+
 ## :star2: Changelog
 - **[2024.4.26]** :tada: Native version release(NO NEED git patch anymore!).
 - **[2024.4.18]** Initial repo.
