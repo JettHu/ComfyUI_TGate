@@ -4,7 +4,7 @@
 
 > Some monkey patch is used for current implementation. If any error occurs, make sure you have the latest version.
 
-If my work helps you, you can give my project a small start. 
+If my work helps you, consider giving it a star. 
 
 Some of my other projects that may help you.
 - [ComfyUI-TCD](https://github.com/JettHu/ComfyUI-TCD)
