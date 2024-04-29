@@ -8,6 +8,7 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
         nonlocal attn_cache
         extra_options = {}
         tgate_enable = transformer_options.get("tgate_enable", False)
+        cond_or_uncond = transformer_options.get("cond_or_uncond", [1, 0])
         block = transformer_options.get("block", None)
         block_index = transformer_options.get("block_index", 0)
         transformer_patches = {}
@@ -34,10 +35,10 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
 
         if tgate_enable and not only_cross_attention and sigma < sigma_gate_attn1 and "attn1" in attn_cache:
             # use cache
-            n = attn_cache["attn1"]
+            n, chunk_count = attn_cache["attn1"]
             if sigma < sigma_gate:
-                uncond, cond = n.chunk(2)
-                n = (uncond + cond) / 2
+                conds = n.chunk(chunk_count)
+                n = sum(conds) / chunk_count
         else:
             n = self.norm1(x)
             context_attn1 = context if self.disable_self_attn else None
@@ -73,7 +74,7 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
                 for p in patch:
                     n = p(n, extra_options)
             if tgate_enable:
-                attn_cache["attn1"] = n  # TODO: reduce, cache times
+                attn_cache["attn1"] = (n, len(cond_or_uncond))  # TODO: reduce, cache times
 
         x += n
         if "middle_patch" in transformer_patches:
@@ -82,10 +83,10 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
                 x = p(x, extra_options)
 
         if tgate_enable and sigma < sigma_gate and "attn2" in attn_cache:
-            n = attn_cache["attn2"]
+            n, chunk_count = attn_cache["attn2"]
             if only_cross_attention or sigma < sigma_gate_attn1:
-                uncond, cond = n.chunk(2)
-                n = (uncond + cond) / 2
+                conds = n.chunk(chunk_count)
+                n = sum(conds) / chunk_count
         else:
             if self.attn2 is not None:
                 n = self.norm2(x)
@@ -119,7 +120,7 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
                     n = p(n, extra_options)
 
             if tgate_enable:
-                attn_cache["attn2"] = n
+                attn_cache["attn2"] = (n, len(cond_or_uncond))
 
         x += n
         if self.is_res:
