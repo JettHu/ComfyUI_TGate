@@ -13,6 +13,9 @@ Some of my other projects that may help you.
 
 
 ## :star2: Changelog
+- **[2024.4.29]** :wrench: `TL,DR`: Improved performance and T-GATE only works where it needs to work.
+  - Fixed a bug that caused `TGateApply` to affect other places where the model is used, even if `TGateApply` is turned off.
+  - Fixed cross attntion results not being cached correctly causing performance to be slightly lower than the git patch version.
 - **[2024.4.26]** :tada: Native version release(NO NEED git patch anymore!).
 - **[2024.4.18]** Initial repo.
 
@@ -86,4 +89,10 @@ The FID is calculated by [PytorchFID](https://github.com/mseitzer/pytorch-fid).
 
 ## :mag: Common promblem
 
-For apple silicon users using the mps backend, torch and macos versions may cause some problems. refer to [issue comment](https://github.com/JettHu/ComfyUI_TGate/issues/4#issuecomment-2077823182).
+- For apple silicon users using the mps backend, torch and macos versions may cause some problems. refer to [issue comment](https://github.com/JettHu/ComfyUI_TGate/issues/4#issuecomment-2077823182).
+
+- Fixed in 2024.4.29. Unable to properly remove T-Gate effects. The situation in the picture below is `bypass the node after apply`.
+
+| 2024.4.26-29 | Updated on 2024.4.29 |
+| :---: | :---: |
+| ![before_fixed](./assets/before_fixed.png) | ![after_fixed](./assets/after_fixed.png) |

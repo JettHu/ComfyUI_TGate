@@ -7,6 +7,7 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
     def tgate_forward(self, x, context=None, transformer_options={}):
         nonlocal attn_cache
         extra_options = {}
+        tgate_enable = transformer_options.get("tgate_enable", False)
         block = transformer_options.get("block", None)
         block_index = transformer_options.get("block_index", 0)
         transformer_patches = {}
@@ -31,7 +32,7 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
             if self.is_res:
                 x += x_skip
 
-        if not only_cross_attention and sigma < sigma_gate_attn1 and "attn1" in attn_cache:
+        if tgate_enable and not only_cross_attention and sigma < sigma_gate_attn1 and "attn1" in attn_cache:
             # use cache
             n = attn_cache["attn1"]
             if sigma < sigma_gate:
@@ -71,7 +72,8 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
                 patch = transformer_patches["attn1_output_patch"]
                 for p in patch:
                     n = p(n, extra_options)
-            attn_cache["attn1"] = n  # TODO: reduce, cache times
+            if tgate_enable:
+                attn_cache["attn1"] = n  # TODO: reduce, cache times
 
         x += n
         if "middle_patch" in transformer_patches:
@@ -79,7 +81,7 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
             for p in patch:
                 x = p(x, extra_options)
 
-        if sigma < sigma_gate and "attn2" in attn_cache:
+        if tgate_enable and sigma < sigma_gate and "attn2" in attn_cache:
             n = attn_cache["attn2"]
             if only_cross_attention or sigma < sigma_gate_attn1:
                 uncond, cond = n.chunk(2)
@@ -115,6 +117,9 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
                 patch = transformer_patches["attn2_output_patch"]
                 for p in patch:
                     n = p(n, extra_options)
+
+            if tgate_enable:
+                attn_cache["attn2"] = n
 
         x += n
         if self.is_res:
@@ -217,6 +222,7 @@ class TGateApply:
         model_clone.model_options["sampler_cfg_rescaler"] = TGateSamplerCfgRescaler(
             sigma_gate, sigma_gate_self_attn, only_cross_attention
         )
+        model_clone.model_options["transformer_options"]["tgate_enable"] = True
         monkey_patching_comfy_sampling_function()
         return (model_clone,)
 
