@@ -1,3 +1,4 @@
+from functools import wraps
 from types import MethodType
 
 
@@ -138,11 +139,12 @@ original_sampling_function_ref = None
 
 
 def sampling_function_wrapper(fn):
-    # model, x, timestep, uncond, cond, cond_scale, model_options={}, seed=None
-    def wrapper(model, x, timestep, uncond, cond, cond_scale, model_options=None, seed=None, **kwargs):
-        model_options = model_options or {}
-        if "sampler_cfg_rescaler" in model_options:
-            cond_scale = model_options["sampler_cfg_rescaler"]({"cond_scale": cond_scale, "timestep": timestep})
+    @wraps(fn)
+    def wrapper(model, x, timestep, uncond, cond, cond_scale, model_options={}, seed=None, **kwargs):
+        if "sampler_pre_cfg_function" in model_options:
+            uncond, cond, cond_scale = model_options["sampler_pre_cfg_function"](
+                sigma=timestep, uncond=uncond, cond=cond, cond_scale=cond_scale
+            )
         return fn(
             model=model,
             x=x,
@@ -154,6 +156,7 @@ def sampling_function_wrapper(fn):
             seed=seed,
             **kwargs,
         )
+    wrapper._tgate_cfg_decorated = True # type: ignore # flag to check monkey patch
 
     return wrapper
 
@@ -162,21 +165,24 @@ def monkey_patching_comfy_sampling_function():
     global original_sampling_function_ref
     from comfy import samplers
 
-    if original_sampling_function_ref is not None and original_sampling_function_ref is not samplers.sampling_function:
+    if original_sampling_function_ref is None:
+        original_sampling_function_ref = samplers.sampling_function
+    # Make sure to only patch once
+    if hasattr(samplers.sampling_function, '_tgate_cfg_decorated'):
         return
-    original_sampling_function_ref = samplers.sampling_function
-    samplers.sampling_function = sampling_function_wrapper(samplers.sampling_function)
+
+    samplers.sampling_function = sampling_function_wrapper(original_sampling_function_ref)
 
 
 class TGateSamplerCfgRescaler:
     def __init__(self, sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=True):
         self.sigma_gate = sigma_gate if only_cross_attention else min(sigma_gate_attn1, sigma_gate)
 
-    def __call__(self, kwds):
-        sigma = kwds["timestep"].detach().cpu()[0].item() if "timestep" in kwds else 999999999.9
+    def __call__(self, sigma, uncond, cond, cond_scale, **kwargs):
+        sigma = sigma.detach().cpu()[0].item()
         if sigma < self.sigma_gate:
-            return 1.0
-        return kwds["cond_scale"]
+            return None, cond, 1.0
+        return uncond, cond, cond_scale
 
 
 class TGateApply:
@@ -220,7 +226,7 @@ class TGateApply:
             )
             # update_wrapper(tgate_forward, tb._forward)
             tb._forward = tgate_forward
-        model_clone.model_options["sampler_cfg_rescaler"] = TGateSamplerCfgRescaler(
+        model_clone.model_options["sampler_pre_cfg_function"] = TGateSamplerCfgRescaler(
             sigma_gate, sigma_gate_self_attn, only_cross_attention
         )
         model_clone.model_options["transformer_options"]["tgate_enable"] = True

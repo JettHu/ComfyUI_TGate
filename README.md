@@ -2,6 +2,8 @@
 
 [ComfyUI](https://github.com/comfyanonymous/ComfyUI) reference implementation for [T-GATE](https://github.com/HaozheLiu-ST/T-GATE).
 
+T-GATE could brings **10%-50% speed up** for different diffusion models, only **slightly** reduces the quality of the generated images and maintains the original composition.
+
 > Some monkey patch is used for current implementation. If any error occurs, make sure you have the latest version.
 
 If my work helps you, consider giving it a star. 
@@ -31,6 +33,20 @@ The [examples directory](./examples/) has workflow example. There are images gen
 | ![origin_result](./assets/origin_result.png) | ![tgate_result](./assets/tgate_result.png) |
 
 T-GATE result image comes from the workflow included in the [example](./examples/tgate_workflow_example.png) image.
+
+
+### Compare to AutomaticCFG
+
+[AutomaticCFG](https://github.com/Extraltodeus/ComfyUI-AutomaticCFG) is another ComfyUI plugin: Your CFG won't be your CFG anymore. It is turned into a way to guide the CFG/final intensity/brightness/saturation, and it adds a 30% speed increase.
+
+> env: T4-8G
+
+| | Origin | T-GATE 0.5 | AutomaticCFG | T-GATE 0.35 |AutomaticCFG fatest |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| result | ![origin_result](./assets/origin_result.png) | ![tgate_result](./assets/tgate_result.png) | ![auto_cfg_boost](./assets/auto_cfg_boost.png) | ![tgate_0_35](./assets/tgate_0_35.png) | ![auto_cfg_fatest](./assets/auto_cfg_fatest.png) |
+| speed | 4.59it/s | **5.68it/s** | 5.62it/s| **6.13it/s** | **6.13it/s** |
+
+T-GATE performs best when maintaining the original composition. However, if you don't need to maintain composition, [AutomaticCFG fatest](https://github.com/Extraltodeus/ComfyUI-AutomaticCFG) can bring even greater speed improvements.
 
 ## :green_book: INSTALL
 ```bash
