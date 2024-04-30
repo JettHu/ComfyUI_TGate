@@ -13,6 +13,7 @@ Some of my other projects that may help you.
 
 
 ## :star2: Changelog
+- **[2024.4.30]** :wrench: Fixed an cond-only sampling bug that caused animatediff error. Thanks [pamparamm](https://github.com/pamparamm).
 - **[2024.4.29]** :wrench: `TL,DR`: Improved performance and T-GATE only works where it needs to work.
   - Fixed a bug that caused `TGateApply` to affect other places where the model is used, even if `TGateApply` is turned off.
   - Fixed cross attntion results not being cached correctly causing performance to be slightly lower than the git patch version.
