@@ -46,7 +46,7 @@ T-GATE result image comes from the workflow included in the [example](./examples
 | result | ![origin_result](./assets/origin_result.png) | ![tgate_result](./assets/tgate_result.png) | ![auto_cfg_boost](./assets/auto_cfg_boost.png) | ![tgate_0_35](./assets/tgate_0_35.png) | ![auto_cfg_fatest](./assets/auto_cfg_fatest.png) |
 | speed | 4.59it/s | **5.68it/s** | 5.62it/s| **6.13it/s** | **6.13it/s** |
 
-T-GATE performs best when maintaining the original composition. However, if you don't need to maintain composition, [AutomaticCFG fatest](https://github.com/Extraltodeus/ComfyUI-AutomaticCFG) can bring even greater speed improvements.
+T-GATE performs best when maintaining the original composition. However, if you don't need to maintain composition, [AutomaticCFG fatest](https://github.com/Extraltodeus/ComfyUI-AutomaticCFG) also brings about the same performance improvement.
 
 ## :green_book: INSTALL
 ```bash
