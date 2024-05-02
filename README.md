@@ -1,5 +1,9 @@
 # ComfyUI_TGate
 
+<p align="center">
+<a href="./README.md">English</a> | <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
 [ComfyUI](https://github.com/comfyanonymous/ComfyUI) reference implementation for [T-GATE](https://github.com/HaozheLiu-ST/T-GATE).
 
 T-GATE could brings **10%-50% speed up** for different diffusion models, only **slightly** reduces the quality of the generated images and maintains the original composition.
