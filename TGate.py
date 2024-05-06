@@ -1,14 +1,22 @@
 from functools import wraps
 from types import MethodType
 
+import torch
 
-def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=True, use_cpu_cache=False):
+
+def make_tgate_forward(
+    sigma_gate=-1,
+    sigma_gate_attn1=-1,
+    only_cross_attention=True,
+    use_cpu_cache=False,
+):
     attn_cache = {}
 
     def tgate_forward(self, x, context=None, transformer_options={}):
         nonlocal attn_cache
         extra_options = {}
         tgate_enable = transformer_options.get("tgate_enable", False)
+        tgate_clear = transformer_options.get("tgate_clear", False)
         cond_or_uncond = transformer_options.get("cond_or_uncond", [1, 0])
         block = transformer_options.get("block", None)
         block_index = transformer_options.get("block_index", 0)
@@ -77,7 +85,10 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
                 for p in patch:
                     n = p(n, extra_options)
             if tgate_enable and not only_cross_attention:
-                attn_cache["attn1"] = (n.cpu() if use_cpu_cache else n, len(cond_or_uncond))  # TODO: reduce, cache times
+                attn_cache["attn1"] = (
+                    n.cpu() if use_cpu_cache else n,
+                    len(cond_or_uncond),
+                )  # TODO: reduce, cache times
 
         x += n
         if "middle_patch" in transformer_patches:
@@ -126,6 +137,8 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
 
             if tgate_enable:
                 attn_cache["attn2"] = (n.cpu() if use_cpu_cache else n, len(cond_or_uncond))
+        if tgate_clear:
+            attn_cache.clear()
 
         x += n
         if self.is_res:
@@ -160,7 +173,8 @@ def sampling_function_wrapper(fn):
             seed=seed,
             **kwargs,
         )
-    wrapper._tgate_cfg_decorated = True # type: ignore # flag to check monkey patch
+
+    wrapper._tgate_cfg_decorated = True  # type: ignore # flag to check monkey patch
 
     return wrapper
 
@@ -172,7 +186,7 @@ def monkey_patching_comfy_sampling_function():
     if original_sampling_function_ref is None:
         original_sampling_function_ref = samplers.sampling_function
     # Make sure to only patch once
-    if hasattr(samplers.sampling_function, '_tgate_cfg_decorated'):
+    if hasattr(samplers.sampling_function, "_tgate_cfg_decorated"):
         return
 
     samplers.sampling_function = sampling_function_wrapper(original_sampling_function_ref)
@@ -187,6 +201,138 @@ class TGateSamplerCfgRescaler:
         if sigma < self.sigma_gate:
             return None, cond, 1.0
         return uncond, cond, cond_scale
+
+
+class TGateProxy:
+    def __init__(self, model_sampling, sigma_gate=-1) -> None:
+        self.sigma_gate = sigma_gate
+        self.model_sampling = model_sampling
+
+    def __call__(self, apply_model, kwargs: dict):
+        input_x = kwargs["input"]
+        timestep_ = kwargs["timestep"]
+        cond_or_uncond = kwargs["cond_or_uncond"]  # [0|1]
+        c = kwargs["c"]
+        c["transformer_options"]["tgate_enable"] = True
+        sigma = timestep_[0].detach().cpu().item()
+
+        if sigma > self.sigma_gate:
+            return apply_model(input_x, timestep_, **c)
+
+        batch_chunks = len(cond_or_uncond)
+        outputs = []
+        input_x_chunks = input_x.chunk(batch_chunks)
+        timestep_chunks = timestep_.chunk(batch_chunks)
+        c_crossattn_chunks = c["c_crossattn"].chunk(batch_chunks)
+        t = self.model_sampling.timestep(timestep_[0].detach().cpu())
+        for i in cond_or_uncond:
+            i = min(i, batch_chunks - 1)
+            if i == 1:
+                outputs.append(torch.zeros_like(input_x_chunks[i], dtype=input_x.dtype, device=input_x.device))
+            else:
+                c["c_crossattn"] = c_crossattn_chunks[i]
+                c["transformer_options"]["cond_or_uncond"] = [i]
+                c["transformer_options"]["sigmas"] = c["transformer_options"]["sigmas"][i : i + 1]
+                c["transformer_options"]["tgate_clear"] = t == 0
+                outputs.append(apply_model(input_x_chunks[i], timestep_chunks[i], **c))
+        return torch.cat(outputs, dim=0)
+
+
+class TGateSamplerCFG:
+    def __init__(self, sigma_gate=-1):
+        self.sigma_gate = sigma_gate
+
+    def __call__(self, args: dict):
+        sigma = args["sigma"][0].detach().cpu().item()
+        if sigma < self.sigma_gate:
+            return args["cond"]
+        uncond_pred = args["uncond_denoised"]
+        cond_pred = args["cond_denoised"]
+        cond_scale = args["cond_scale"]
+        x = args["input"]
+        return x - (uncond_pred + (cond_pred - uncond_pred) * cond_scale)
+
+
+class TGateApplyAdvanced:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "start_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "self_attn_start_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "only_cross_attention": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "use_cpu_cache": ("BOOLEAN", {"default": False}),
+            },
+        }
+
+    RETURN_TYPES = ("MODEL",)
+    FUNCTION = "apply_tgate"
+    CATEGORY = "TGate"
+
+    def apply_tgate(
+        self,
+        model,
+        start_at=1.0,
+        self_attn_start_at=1.0,
+        only_cross_attention=True,
+        use_cpu_cache=False,
+    ):
+        model_clone = model.clone()
+        model_sampling = model_clone.get_model_object("model_sampling")
+        sigma_gate = model_sampling.percent_to_sigma(start_at)
+        sigma_gate_self_attn = model_sampling.percent_to_sigma(self_attn_start_at)
+
+        transformer_blocks = []
+        for n, m in model_clone.model.named_modules():
+            if not n.endswith("transformer_blocks"):
+                continue
+            for tb in m:
+                transformer_blocks.append(tb)
+
+        # We inject function into the transformer_blocks instances so that
+        # we can apply tgate without modifying the library source.
+        for tb in transformer_blocks:
+            tgate_forward = MethodType(
+                make_tgate_forward(
+                    sigma_gate,
+                    sigma_gate_attn1=sigma_gate_self_attn,
+                    only_cross_attention=only_cross_attention,
+                    use_cpu_cache=use_cpu_cache,
+                ),
+                tb,
+            )
+            tb._forward = tgate_forward
+
+        sigma_gate_disable_cfg = sigma_gate if only_cross_attention else min(sigma_gate_self_attn, sigma_gate)
+        model_clone.set_model_unet_function_wrapper(
+            TGateProxy(
+                sigma_gate=sigma_gate_disable_cfg,
+                model_sampling=model_sampling,
+            )
+        )
+
+        model_clone.set_model_sampler_cfg_function(
+            TGateSamplerCFG(sigma_gate_disable_cfg),
+            disable_cfg1_optimization=False,  # TODO: Consider whether to force enable cfg1_optimization
+        )
+        return (model_clone,)
+
+
+class TGateApplySimple(TGateApplyAdvanced):
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "start_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+            },
+            "optional": {
+                "use_cpu_cache": ("BOOLEAN", {"default": False}),
+            },
+        }
 
 
 class TGateApply:
@@ -244,8 +390,12 @@ class TGateApply:
 
 NODE_CLASS_MAPPINGS = {
     "TGateApply": TGateApply,
+    "TGateApplySimple": TGateApplySimple,
+    "TGateApplyAdvanced": TGateApplyAdvanced,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "TGateApply": "TGate Apply",
+    "TGateApply": "TGate Apply(Deprecated)",
+    "TGateApplySimple": "TGate Apply",
+    "TGateApplyAdvanced": "TGate Apply Advanced",
 }

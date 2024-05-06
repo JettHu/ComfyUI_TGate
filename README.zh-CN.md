@@ -20,6 +20,10 @@ T-GATE 可以在**保持原始构图**，**略微**降低生成图像的质量�
 
 
 ## :star2: 更新日志
+- **[2024.5.06]**: 
+  - 新增了 `use_cpu_cache` 参数，可以用在一些 GPU OOM 的情况。
+  - 重构了 apply node, 旧的 node 将会在几个版本后弃用。
+  - 新增了一个简化版 node 和一个 Advanced node。
 - **[2024.4.30]** :wrench: 修复了 animatediff 中 cond-only 情况下的一个错误。感谢 [pamparamm](https://github.com/pamparamm).
 - **[2024.4.29]** :wrench: `TL,DR`: 相比上一版本提升了一些性能，并且 T-GATE 只在它该起作用的地方起作用。
   - 修复了一个即使 `TGateApply` 节点被 bypass 或者删除掉，`TGateApply` 会仍然影响其他使用模型的地方（下游）的 bug。
@@ -69,7 +73,17 @@ git clone https://github.com/JettHu/ComfyUI_TGate
 
 ## :book: 节点说明
 
-### TGateApply
+### TGate Apply
+
+#### 输入
+- **model**, `Load Checkpoint` 或者是其他节点加载的 SD 模型。
+
+#### 配置参数
+- **start_at**, 这个是 T-GATE 起作用的百分比，表示从哪一步开始使用 T-GATE cache，越早开始性能提升越多，不过细节会丢失更多，需要自己取舍。
+果关掉会导致结果细节丢失更多，强烈不建议关掉。
+- **use_cpu_cache**: 如果在多 batch (比如 animatediff) 的时候遇到了 GPU OOM 问题，可以改成 true，但是 T-GATE 带来的加速会有一部分损失。
+
+### TGate Apply Advanced
 
 #### 输入
 - **model**, `Load Checkpoint` 或者是其他节点加载的 SD 模型。
@@ -77,7 +91,22 @@ git clone https://github.com/JettHu/ComfyUI_TGate
 #### 配置参数
 - **start_at**, 这个是 T-GATE 起作用的百分比，表示从哪一步开始使用 T-GATE cache，越早开始性能提升越多，不过细节会丢失更多，需要自己取舍。
 - **only_cross_attention**, **[推荐]** 默认是打开的，作用是控制是否只缓存`cross attntion`, 参考这个 [issues](https://github.com/HaozheLiu-ST/T-GATE/issues/8#issuecomment-2061379798)，如果关掉会导致结果细节丢失更多，强烈不建议关掉。
+- **use_cpu_cache**: 如果在多 batch (比如 animatediff) 的时候遇到了 GPU OOM 问题，可以改成 true，但是 T-GATE 带来的加速会有一部分损失。
 
+#### 可选配置
+- **self_attn_start_at**, 只在 `only_cross_attention` 关掉时发生作用, 表示从哪一步开始对 self attnention 使用 T-GATE cache。
+
+### TGate Apply(Deprecated)
+
+> 这个 node 已经弃用，将会在几个版本后移除
+
+#### 输入
+- **model**, `Load Checkpoint` 或者是其他节点加载的 SD 模型。
+
+#### 配置参数
+- **start_at**, 这个是 T-GATE 起作用的百分比，表示从哪一步开始使用 T-GATE cache，越早开始性能提升越多，不过细节会丢失更多，需要自己取舍。
+- **only_cross_attention**, **[推荐]** 默认是打开的，作用是控制是否只缓存`cross attntion`, 参考这个 [issues](https://github.com/HaozheLiu-ST/T-GATE/issues/8#issuecomment-2061379798)，如果关掉会导致结果细节丢失更多，强烈不建议关掉。
+- **use_cpu_cache**: 如果在多 batch (比如 animatediff) 的时候遇到了 GPU OOM 问题，可以改成 true，但是 T-GATE 带来的加速会有一部分损失。
 
 #### 可选配置
 - **self_attn_start_at**, 只在 `only_cross_attention` 关掉时发生作用, 表示从哪一步开始对 self attnention 使用 T-GATE cache。

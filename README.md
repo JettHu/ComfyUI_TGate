@@ -19,7 +19,10 @@ Some of my other projects that may help you.
 
 
 ## :star2: Changelog
-- **[2024.5.06]**: add `use_cpu_cache`, reduce some GPU OOM promblem.
+- **[2024.5.06]**: 
+  - Add `use_cpu_cache`, reduce some GPU OOM promblem.
+  - Refactor apply node, Deprecated old monkey patching method node. The legacy one will be removed after few version. 
+  - Add a simple node and advanced node.
 - **[2024.4.30]** :wrench: Fixed an cond-only sampling bug that caused animatediff error. Thanks [pamparamm](https://github.com/pamparamm).
 - **[2024.4.29]** :wrench: `TL,DR`: Improved performance and T-GATE only works where it needs to work.
   - Fixed a bug that caused `TGateApply` to affect other places where the model is used, even if `TGateApply` is turned off.
@@ -68,7 +71,16 @@ git clone https://github.com/JettHu/ComfyUI_TGate
 
 ## :book: Nodes reference
 
-### TGateApply
+### TGate Apply
+
+#### Inputs
+- **model**, model loaded by `Load Checkpoint` and other MODEL loaders.
+
+#### Configuration parameters
+- **start_at**, this is the percentage of steps. Defines at what percentage point of the generation to start use the T-GATE cache.
+- **use_cpu_cache**: If multiple batches (animatediff) cause GPU OOM, you can set it to true, and T-GATE performance will decrease.
+
+### TGate Apply Advanced
 
 #### Inputs
 - **model**, model loaded by `Load Checkpoint` and other MODEL loaders.
@@ -76,7 +88,22 @@ git clone https://github.com/JettHu/ComfyUI_TGate
 #### Configuration parameters
 - **start_at**, this is the percentage of steps. Defines at what percentage point of the generation to start use the T-GATE cache.
 - **only_cross_attention**, **[RECOMMEND]** default is True, the effect is to cache only the output of cross-attention, ref to [issues](https://github.com/HaozheLiu-ST/T-GATE/issues/8#issuecomment-2061379798)
-- **use_cpu_cache**>: If multiple batches (animatediff) cause GPU OOM, you can set it to true, and T-GATE performance will decrease.
+- **use_cpu_cache**: If multiple batches (animatediff) cause GPU OOM, you can set it to true, and T-GATE performance will decrease.
+
+#### Optional configuration
+- **self_attn_start_at**, only takes effect when `only_cross_attention` is `false`, percentage of steps too. Defines at what percentage point of the generation to start use the T-GATE cache on latent self attnention.
+
+### TGate Apply(Deprecated)
+
+> This node is already deprecated, and will be removed after few version.
+
+#### Inputs
+- **model**, model loaded by `Load Checkpoint` and other MODEL loaders.
+
+#### Configuration parameters
+- **start_at**, this is the percentage of steps. Defines at what percentage point of the generation to start use the T-GATE cache.
+- **only_cross_attention**, **[RECOMMEND]** default is True, the effect is to cache only the output of cross-attention, ref to [issues](https://github.com/HaozheLiu-ST/T-GATE/issues/8#issuecomment-2061379798)
+- **use_cpu_cache**: If multiple batches (animatediff) cause GPU OOM, you can set it to true, and T-GATE performance will decrease.
 
 #### Optional configuration
 - **self_attn_start_at**, only takes effect when `only_cross_attention` is `false`, percentage of steps too. Defines at what percentage point of the generation to start use the T-GATE cache on latent self attnention.
@@ -108,7 +135,7 @@ The FID is calculated by [PytorchFID](https://github.com/mseitzer/pytorch-fid).
 ## :memo: TODO
 - [x] Result image quality is inconsistent with origin. Now cache attn2 (cross_attention) only.
 - [x] Implement a native version and no longer rely on git patch
-- [ ] Fully compatible with animatediff. Currently, both plugins hook `comfy.samplers.sampling_function`, T-Gate does not perform correctly. [refer to](https://github.com/JettHu/ComfyUI_TGate/issues/10#issuecomment-2095149176)
+- [x] Fully compatible with animatediff. Currently, both plugins hook `comfy.samplers.sampling_function`, T-Gate does not perform correctly. [refer to](https://github.com/JettHu/ComfyUI_TGate/issues/10#issuecomment-2095149176)
 - [ ] compatible with TiledDiffusion. [issue #11](https://github.com/JettHu/ComfyUI_TGate/issues/11)
 
 ## :mag: Common promblem
