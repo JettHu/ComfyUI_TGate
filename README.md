@@ -107,6 +107,8 @@ The FID is calculated by [PytorchFID](https://github.com/mseitzer/pytorch-fid).
 ## :memo: TODO
 - [x] Result image quality is inconsistent with origin. Now cache attn2 (cross_attention) only.
 - [x] Implement a native version and no longer rely on git patch
+- [ ] Fully compatible with animatediff. Currently, both plugins hook `comfy.samplers.sampling_function`, T-Gate does not perform correctly. [refer to](https://github.com/JettHu/ComfyUI_TGate/issues/10#issuecomment-2095149176)
+- [ ] compatible with TiledDiffusion. [issue #11](https://github.com/JettHu/ComfyUI_TGate/issues/11)
 
 ## :mag: Common promblem
 
