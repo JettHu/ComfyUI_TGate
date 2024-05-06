@@ -19,6 +19,7 @@ Some of my other projects that may help you.
 
 
 ## :star2: Changelog
+- **[2024.5.06]**: add `use_cpu_cache`, reduce some GPU OOM promblem.
 - **[2024.4.30]** :wrench: Fixed an cond-only sampling bug that caused animatediff error. Thanks [pamparamm](https://github.com/pamparamm).
 - **[2024.4.29]** :wrench: `TL,DR`: Improved performance and T-GATE only works where it needs to work.
   - Fixed a bug that caused `TGateApply` to affect other places where the model is used, even if `TGateApply` is turned off.
@@ -75,7 +76,7 @@ git clone https://github.com/JettHu/ComfyUI_TGate
 #### Configuration parameters
 - **start_at**, this is the percentage of steps. Defines at what percentage point of the generation to start use the T-GATE cache.
 - **only_cross_attention**, **[RECOMMEND]** default is True, the effect is to cache only the output of cross-attention, ref to [issues](https://github.com/HaozheLiu-ST/T-GATE/issues/8#issuecomment-2061379798)
-
+- **use_cpu_cache**>: If multiple batches (animatediff) cause GPU OOM, you can set it to true, and T-GATE performance will decrease.
 
 #### Optional configuration
 - **self_attn_start_at**, only takes effect when `only_cross_attention` is `false`, percentage of steps too. Defines at what percentage point of the generation to start use the T-GATE cache on latent self attnention.

@@ -2,7 +2,7 @@ from functools import wraps
 from types import MethodType
 
 
-def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=True):
+def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=True, use_cpu_cache=False):
     attn_cache = {}
 
     def tgate_forward(self, x, context=None, transformer_options={}):
@@ -40,6 +40,8 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
             if sigma < sigma_gate:
                 conds = n.chunk(chunk_count)
                 n = sum(conds) / chunk_count
+            if use_cpu_cache:
+                n = n.to(x.device)
         else:
             n = self.norm1(x)
             context_attn1 = context if self.disable_self_attn else None
@@ -74,8 +76,8 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
                 patch = transformer_patches["attn1_output_patch"]
                 for p in patch:
                     n = p(n, extra_options)
-            if tgate_enable:
-                attn_cache["attn1"] = (n, len(cond_or_uncond))  # TODO: reduce, cache times
+            if tgate_enable and not only_cross_attention:
+                attn_cache["attn1"] = (n.cpu() if use_cpu_cache else n, len(cond_or_uncond))  # TODO: reduce, cache times
 
         x += n
         if "middle_patch" in transformer_patches:
@@ -88,6 +90,8 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
             if only_cross_attention or sigma < sigma_gate_attn1:
                 conds = n.chunk(chunk_count)
                 n = sum(conds) / chunk_count
+            if use_cpu_cache:
+                n = n.to(x.device)
         else:
             if self.attn2 is not None:
                 n = self.norm2(x)
@@ -121,7 +125,7 @@ def make_tgate_forward(sigma_gate=-1, sigma_gate_attn1=-1, only_cross_attention=
                     n = p(n, extra_options)
 
             if tgate_enable:
-                attn_cache["attn2"] = (n, len(cond_or_uncond))
+                attn_cache["attn2"] = (n.cpu() if use_cpu_cache else n, len(cond_or_uncond))
 
         x += n
         if self.is_res:
@@ -194,14 +198,17 @@ class TGateApply:
                 "start_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "only_cross_attention": ("BOOLEAN", {"default": True}),
             },
-            "optional": {"self_attn_start_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01})},
+            "optional": {
+                "self_attn_start_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "use_cpu_cache": ("BOOLEAN", {"default": False}),
+            },
         }
 
     RETURN_TYPES = ("MODEL",)
     FUNCTION = "apply_tgate"
     CATEGORY = "TGate"
 
-    def apply_tgate(self, model, start_at=1.0, only_cross_attention=True, self_attn_start_at=1.0):
+    def apply_tgate(self, model, start_at=1.0, only_cross_attention=True, self_attn_start_at=1.0, use_cpu_cache=False):
         model_clone = model.clone()
         sigma_gate = model_clone.get_model_object("model_sampling").percent_to_sigma(start_at)
         sigma_gate_self_attn = model_clone.get_model_object("model_sampling").percent_to_sigma(self_attn_start_at)
@@ -221,6 +228,7 @@ class TGateApply:
                     sigma_gate,
                     sigma_gate_attn1=sigma_gate_self_attn,
                     only_cross_attention=only_cross_attention,
+                    use_cpu_cache=use_cpu_cache,
                 ),
                 tb,
             )
