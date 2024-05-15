@@ -224,6 +224,7 @@ class TGateProxy:
         input_x_chunks = input_x.chunk(batch_chunks)
         timestep_chunks = timestep_.chunk(batch_chunks)
         c_crossattn_chunks = c["c_crossattn"].chunk(batch_chunks)
+        y_chunks = None if "y" not in c else c["y"].chunk(batch_chunks)
         t = self.model_sampling.timestep(timestep_[0].detach().cpu())
         for i in cond_or_uncond:
             i = min(i, batch_chunks - 1)
@@ -231,6 +232,8 @@ class TGateProxy:
                 outputs.append(torch.zeros_like(input_x_chunks[i], dtype=input_x.dtype, device=input_x.device))
             else:
                 c["c_crossattn"] = c_crossattn_chunks[i]
+                if y_chunks is not None:
+                    c["y"] = y_chunks[i]
                 c["transformer_options"]["cond_or_uncond"] = [i]
                 c["transformer_options"]["sigmas"] = c["transformer_options"]["sigmas"][i : i + 1]
                 c["transformer_options"]["tgate_clear"] = t == 0

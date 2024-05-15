@@ -20,6 +20,8 @@ T-GATE 可以在**保持原始构图**，**略微**降低生成图像的质量�
 
 
 ## :star2: 更新日志
+- **[2024.5.15]**: 
+  - 修复 sdxl x, y batch 错误。如果遇到了某些错误，可以试试`TGate Apply(Deprecated)`。
 - **[2024.5.06]**: 
   - 新增了 `use_cpu_cache` 参数，可以用在一些 GPU OOM 的情况。
   - 重构了 apply node, 旧的 node 将会在几个版本后弃用。
