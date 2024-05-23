@@ -19,6 +19,7 @@ Some of my other projects that may help you.
 
 
 ## :star2: Changelog
+- **[2024.5.23]**: updated to latest ComfyUI version
 - **[2024.5.15]**: 
   - Fix sdxl x, y batch error. If you encounter some errors, you can try `TGate Apply(Deprecated)` node.
 - **[2024.5.06]**: 

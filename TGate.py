@@ -307,7 +307,10 @@ class TGateApplyAdvanced:
                 ),
                 tb,
             )
-            tb._forward = tgate_forward
+            if hasattr(tb, "_forward"):
+                tb._forward = tgate_forward
+            else:
+                tb.forward = tgate_forward
 
         sigma_gate_disable_cfg = sigma_gate if only_cross_attention else min(sigma_gate_self_attn, sigma_gate)
         model_clone.set_model_unet_function_wrapper(
@@ -382,7 +385,10 @@ class TGateApply:
                 tb,
             )
             # update_wrapper(tgate_forward, tb._forward)
-            tb._forward = tgate_forward
+            if hasattr(tb, "_forward"):
+                tb._forward = tgate_forward
+            else:
+                tb.forward = tgate_forward
         model_clone.model_options["sampler_pre_cfg_function"] = TGateSamplerCfgRescaler(
             sigma_gate, sigma_gate_self_attn, only_cross_attention
         )
