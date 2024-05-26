@@ -227,17 +227,17 @@ class TGateProxy:
         y_chunks = None if "y" not in c else c["y"].chunk(batch_chunks)
         t = self.model_sampling.timestep(timestep_[0].detach().cpu())
         for i in cond_or_uncond:
-            i = min(i, batch_chunks - 1)
+            chunk_idx = min(i, batch_chunks - 1)
             if i == 1:
-                outputs.append(torch.zeros_like(input_x_chunks[i], dtype=input_x.dtype, device=input_x.device))
+                outputs.append(torch.zeros_like(input_x_chunks[chunk_idx], dtype=input_x.dtype, device=input_x.device))
             else:
-                c["c_crossattn"] = c_crossattn_chunks[i]
+                c["c_crossattn"] = c_crossattn_chunks[chunk_idx]
                 if y_chunks is not None:
-                    c["y"] = y_chunks[i]
+                    c["y"] = y_chunks[chunk_idx]
                 c["transformer_options"]["cond_or_uncond"] = [i]
-                c["transformer_options"]["sigmas"] = c["transformer_options"]["sigmas"][i : i + 1]
+                # c["transformer_options"]["sigmas"] = c["transformer_options"]["sigmas"][chunk_idx : chunk_idx + 1]
                 c["transformer_options"]["tgate_clear"] = t == 0
-                outputs.append(apply_model(input_x_chunks[i], timestep_chunks[i], **c))
+                outputs.append(apply_model(input_x_chunks[chunk_idx], timestep_chunks[chunk_idx], **c))
         return torch.cat(outputs, dim=0)
 
 
