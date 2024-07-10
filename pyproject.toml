@@ -1,5 +1,20 @@
+[project]
+name = "comfyui_tgate"
+description = "T-GATE plugin for ComfyUI"
+version = "0.1.0"
+license = "LICENSE"
+
+[project.urls]
+Repository = "https://github.com/JettHu/ComfyUI_TGate"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "jetthu"
+DisplayName = "ComfyUI_TGate"
+Icon = ""
+
 [tool.poetry]
-name = "tgate-comfyui"
+name = "comfyui_tgate"
 version = "0.1.0"
 description = "T-GATE plugin for ComfyUI"
 authors = ["jetthu <jett.hux@gmail.com>"]
